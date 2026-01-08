@@ -14,6 +14,11 @@ struct ContentView: View {
     // State property to track loading state (bonus feature)
     @State private var isLoading = false
     
+    // Pagination state
+    @State private var currentPage = 1
+    @State private var totalPages = 1
+    @State private var isLoadingMore = false
+    
     var body: some View {
         NavigationStack {
             List {
@@ -61,6 +66,24 @@ struct ContentView: View {
                         Text(photo.title)
                             .font(.body)
                     }
+                    .onAppear {
+                        // Load more photos when the last photo appears (infinite scroll)
+                        if photo.id == photos.last?.id && currentPage < totalPages && !isLoadingMore {
+                            Task {
+                                await loadMorePhotos()
+                            }
+                        }
+                    }
+                }
+                
+                // Show loading indicator at the bottom when loading more pages
+                if isLoadingMore {
+                    HStack {
+                        Spacer()
+                        ProgressView("Loading more photos...")
+                        Spacer()
+                    }
+                    .listRowSeparator(.hidden)
                 }
             }
             .navigationTitle("Photos")
@@ -73,21 +96,48 @@ struct ContentView: View {
         }
     }
     
-    /// Fetches photos from the API and updates the state
+    /// Fetches the first page of photos from the API and updates the state
     private func loadPhotos() async {
         isLoading = true
+        currentPage = 1
         
-        // Call the service function to fetch photos
-        photos = await PhotoService.fetchPhotos()
-        
-        // Basic error handling (bonus requirement) - print error if no photos loaded
-        if photos.isEmpty {
+        // Call the service function to fetch first page
+        guard let response = await PhotoService.fetchPhotos(page: 1) else {
             print("⚠️ Error: Failed to load photos from API")
-        } else {
-            print("✅ Successfully loaded \(photos.count) photos")
+            isLoading = false
+            return
         }
         
+        // Update state with first page data
+        photos = response.photos
+        totalPages = response.totalPages
+        
+        print("✅ Successfully loaded \(photos.count) photos (Page \(currentPage)/\(totalPages))")
+        
         isLoading = false
+    }
+    
+    /// Loads the next page of photos and appends them to the existing list
+    private func loadMorePhotos() async {
+        guard currentPage < totalPages else { return }
+        
+        isLoadingMore = true
+        let nextPage = currentPage + 1
+        
+        // Fetch the next page
+        guard let response = await PhotoService.fetchPhotos(page: nextPage) else {
+            print("⚠️ Error: Failed to load page \(nextPage)")
+            isLoadingMore = false
+            return
+        }
+        
+        // Append new photos to existing list
+        photos.append(contentsOf: response.photos)
+        currentPage = nextPage
+        
+        print("✅ Loaded page \(currentPage)/\(totalPages) - Total photos: \(photos.count)")
+        
+        isLoadingMore = false
     }
 }
 
