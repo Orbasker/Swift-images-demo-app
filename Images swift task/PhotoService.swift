@@ -13,16 +13,43 @@ struct PhotoService {
     private static let apiURL = "https://boringapi.com/api/v1/photos/"
     
     /// Fetches photos from the remote API
-    /// - Returns: Array of Photo objects, or empty array if fetch fails
-    static func fetchPhotos() async -> [Photo] {
-        // Create URL from the API endpoint
-        guard let url = URL(string: apiURL) else {
+    /// - Parameters:
+    ///   - page: The page number to fetch (defaults to 1)
+    ///   - limit: Number of photos per page (defaults to 100, max: 100)
+    ///   - search: Optional search query to filter photos by title or description
+    ///   - sortBy: Field to sort by (defaults to "id")
+    ///   - sortOrder: Sort order "asc" or "desc" (defaults to "desc")
+    /// - Returns: PhotosResponse containing photos and pagination info, or nil if fetch fails
+    static func fetchPhotos(
+        page: Int = 1,
+        limit: Int = 100,
+        search: String? = nil,
+        sortBy: String = "id",
+        sortOrder: String = "desc"
+    ) async -> PhotosResponse? {
+        // Build URL with query parameters
+        var urlComponents = URLComponents(string: apiURL)
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "page", value: String(page)),
+            URLQueryItem(name: "limit", value: String(min(limit, 100))), // Cap at 100
+            URLQueryItem(name: "sort_by", value: sortBy),
+            URLQueryItem(name: "sort_order", value: sortOrder)
+        ]
+        
+        // Add search parameter if provided
+        if let search = search, !search.isEmpty {
+            queryItems.append(URLQueryItem(name: "search", value: search))
+        }
+        
+        urlComponents?.queryItems = queryItems
+        
+        guard let url = urlComponents?.url else {
             print("Error: Invalid API URL")
-            return []
+            return nil
         }
         
         do {
-            print("📡 Fetching photos from: \(apiURL)")
+            print("📡 Fetching photos from: \(url.absoluteString)")
             // Fetch data from the API using async/await
             let (data, response) = try await URLSession.shared.data(from: url)
             
@@ -31,6 +58,7 @@ struct PhotoService {
                 print("📥 HTTP Status: \(httpResponse.statusCode)")
                 if httpResponse.statusCode != 200 {
                     print("⚠️ Unexpected HTTP status code: \(httpResponse.statusCode)")
+                    return nil
                 }
             }
             
@@ -40,12 +68,9 @@ struct PhotoService {
             let photosResponse = try JSONDecoder().decode(PhotosResponse.self, from: data)
             print("✅ Successfully decoded response: \(photosResponse.message)")
             print("📊 Total photos in response: \(photosResponse.count)")
+            print("📄 Page \(page)/\(photosResponse.totalPages)")
             
-            // Extract photos array from the response
-            let photos = photosResponse.photos
-            print("✅ Successfully decoded \(photos.count) photos")
-            
-            return photos
+            return photosResponse
         } catch let decodingError as DecodingError {
             // Handle JSON decoding errors specifically
             print("❌ JSON Decoding Error: \(decodingError)")
@@ -61,7 +86,7 @@ struct PhotoService {
             @unknown default:
                 print("   Unknown decoding error")
             }
-            return []
+            return nil
         } catch {
             // Handle network and other errors
             print("❌ Error fetching photos: \(error.localizedDescription)")
@@ -69,7 +94,7 @@ struct PhotoService {
                 print("   URL Error Code: \(urlError.code.rawValue)")
                 print("   URL Error Description: \(urlError.localizedDescription)")
             }
-            return []
+            return nil
         }
     }
 }

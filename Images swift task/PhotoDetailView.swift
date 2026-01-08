@@ -180,7 +180,6 @@ struct ZoomableImageView: UIViewRepresentable {
         context.coordinator.scrollView = scrollView
         
         // Set initial frame to make image visible immediately
-        let screenSize = UIScreen.main.bounds.size
         imageView.frame = CGRect(origin: .zero, size: image.size)
         scrollView.contentSize = image.size
         
