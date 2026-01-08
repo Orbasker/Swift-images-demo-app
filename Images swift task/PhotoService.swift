@@ -13,12 +13,16 @@ struct PhotoService {
     private static let apiURL = "https://boringapi.com/api/v1/photos/"
     
     /// Fetches photos from the remote API using URLSession
-    /// - Returns: Array of Photo objects, or empty array if fetch fails
-    static func fetchPhotos() async -> [Photo] {
-        // Create URL from the API endpoint
-        guard let url = URL(string: apiURL) else {
+    /// - Parameter page: The page number to fetch (defaults to 1)
+    /// - Returns: PhotosResponse containing photos and pagination info, or nil if fetch fails
+    static func fetchPhotos(page: Int = 1) async -> PhotosResponse? {
+        // Build URL with pagination query parameter
+        var urlComponents = URLComponents(string: apiURL)
+        urlComponents?.queryItems = [URLQueryItem(name: "page", value: String(page))]
+        
+        guard let url = urlComponents?.url else {
             print("Error: Invalid API URL")
-            return []
+            return nil
         }
         
         do {
@@ -29,19 +33,18 @@ struct PhotoService {
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode != 200 {
                     print("Error: HTTP status code \(httpResponse.statusCode)")
-                    return []
+                    return nil
                 }
             }
             
             // Decode JSON response into PhotosResponse wrapper
             let photosResponse = try JSONDecoder().decode(PhotosResponse.self, from: data)
             
-            // Extract and return photos array from the response
-            return photosResponse.photos
+            return photosResponse
         } catch {
             // Basic error handling (bonus requirement) - print error message
             print("Error fetching photos: \(error.localizedDescription)")
-            return []
+            return nil
         }
     }
 }
