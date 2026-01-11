@@ -12,11 +12,12 @@ import Photos
 struct PhotoDetailView: View {
     let photo: Photo
     @Environment(\.dismiss) var dismiss
-    @State private var image: UIImage?
-    @State private var isLoading = true
-    @State private var showShareSheet = false
-    @State private var showSaveAlert = false
-    @State private var saveAlertMessage = ""
+    @State private var viewModel: PhotoDetailViewModel
+    
+    init(photo: Photo) {
+        self.photo = photo
+        self._viewModel = State(initialValue: PhotoDetailViewModel(photo: photo))
+    }
     
     var body: some View {
         NavigationStack {
@@ -24,11 +25,11 @@ struct PhotoDetailView: View {
                 // Background color
                 Color.black.ignoresSafeArea()
                 
-                if isLoading {
+                if viewModel.isLoading {
                     // Loading indicator
                     ProgressView()
                         .tint(.white)
-                } else if let image = image {
+                } else if let image = viewModel.image {
                     // Zoomable image view
                     ZoomableImageView(image: image)
                         .ignoresSafeArea()
@@ -44,7 +45,7 @@ struct PhotoDetailView: View {
                     }
                 }
             }
-            .navigationTitle(photo.title)
+            .navigationTitle(viewModel.photoTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -56,13 +57,13 @@ struct PhotoDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
-                            saveToPhotos()
+                            viewModel.saveToPhotos()
                         } label: {
                             Label("Save to Photos", systemImage: "square.and.arrow.down")
                         }
                         
                         Button {
-                            showShareSheet = true
+                            viewModel.showShareSheet = true
                         } label: {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
@@ -73,78 +74,15 @@ struct PhotoDetailView: View {
                 }
             }
             .onAppear {
-                loadFullSizeImage()
+                viewModel.loadFullSizeImage()
             }
-            .sheet(isPresented: $showShareSheet) {
-                if let image = image {
-                    ShareSheet(activityItems: [image, photo.title])
-                }
+            .sheet(isPresented: $viewModel.showShareSheet) {
+                ShareSheet(activityItems: viewModel.shareActivityItems)
             }
-            .alert("Save Photo", isPresented: $showSaveAlert) {
+            .alert("Save Photo", isPresented: $viewModel.showSaveAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
-                Text(saveAlertMessage)
-            }
-        }
-    }
-    
-    /// Loads the full-size image from URL
-    private func loadFullSizeImage() {
-        guard let url = URL(string: photo.url) else {
-            isLoading = false
-            return
-        }
-        
-        Task {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                if let loadedImage = UIImage(data: data) {
-                    await MainActor.run {
-                        self.image = loadedImage
-                        self.isLoading = false
-                    }
-                } else {
-                    await MainActor.run {
-                        self.isLoading = false
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.isLoading = false
-                }
-            }
-        }
-    }
-    
-    /// Saves the image to the device's photo library
-    private func saveToPhotos() {
-        guard let image = image else {
-            saveAlertMessage = "Image not available"
-            showSaveAlert = true
-            return
-        }
-        
-        // Request photo library access
-        PHPhotoLibrary.requestAuthorization { status in
-            if status == .authorized || status == .limited {
-                // Save to photo library
-                PHPhotoLibrary.shared().performChanges({
-                    PHAssetChangeRequest.creationRequestForAsset(from: image)
-                }) { success, error in
-                    DispatchQueue.main.async {
-                        if success {
-                            self.saveAlertMessage = "Photo saved successfully!"
-                        } else {
-                            self.saveAlertMessage = "Failed to save photo: \(error?.localizedDescription ?? "Unknown error")"
-                        }
-                        self.showSaveAlert = true
-                    }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.saveAlertMessage = "Photo library access denied. Please enable it in Settings."
-                    self.showSaveAlert = true
-                }
+                Text(viewModel.saveAlertMessage)
             }
         }
     }
